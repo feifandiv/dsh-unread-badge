@@ -1,5 +1,8 @@
 # dsh-unread-badge
 
+[![npm](https://img.shields.io/npm/v/@fanfan4589/dsh-unread-badge)](https://www.npmjs.com/package/@fanfan4589/dsh-unread-badge) [![license](https://img.shields.io/npm/l/@fanfan4589/dsh-unread-badge)](./LICENSE)
+
+
 给 DeepSeek Harness 补上「未读」这件事：**Dock 图标上的数字角标** + **工作区标题行上的彩色点**。折叠起来的工作区也能一眼看出里面有没有跑完没看的结果。
 
 > 纯渲染层方案：不需要 Host 路由、不落盘、不新增数据源，所有事实都来自宿主自己的 `sessionStatus` / `sessions.list` / `workspaces.list`。
