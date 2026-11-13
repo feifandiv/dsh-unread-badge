@@ -1,0 +1,4 @@
+- insert:
+    - id: unread-badge
+      name: '@feifan/dsh-unread-badge'
+      config: {}

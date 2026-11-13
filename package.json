@@ -1,0 +1,57 @@
+{
+  "name": "@fanfan4589/dsh-unread-badge",
+  "version": "0.1.0",
+  "description": "Unread badge for DeepSeek Harness: a Dock number badge for replies you have not opened yet, plus a coloured dot on Workspace rows so a collapsed group still tells you something finished there. · 未读角标：Dock 数字角标 + 工作区折叠时的彩色提醒点。",
+  "type": "module",
+  "license": "MIT",
+  "author": "feifandiv",
+  "keywords": [
+    "dsh",
+    "dsh-plugin",
+    "deepseek-harness",
+    "unread",
+    "badge",
+    "dock",
+    "workspace"
+  ],
+  "engines": {
+    "dsh": ">=0.2.1-rc.1"
+  },
+  "exports": {
+    ".": "./index.js",
+    "./client": "./client.js"
+  },
+  "files": [
+    "index.js",
+    "client.js",
+    "cordis.patch.yml",
+    "icon.svg",
+    "README.md",
+    "LICENSE"
+  ],
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web",
+      "immediately": true,
+      "inject": [
+        "@deepseek-ai/dsh-client-ui-session",
+        "@deepseek-ai/dsh-client-ui-workspace",
+        "@deepseek-ai/dsh-api-session-controller"
+      ]
+    }
+  },
+  "homepage": "https://github.com/feifandiv/dsh-unread-badge#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/feifandiv/dsh-unread-badge.git"
+  },
+  "bugs": {
+    "url": "https://github.com/feifandiv/dsh-unread-badge/issues"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}
