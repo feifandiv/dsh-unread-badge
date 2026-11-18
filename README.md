@@ -2,98 +2,179 @@
 
 [![npm](https://img.shields.io/npm/v/@fanfan4589/dsh-unread-badge)](https://www.npmjs.com/package/@fanfan4589/dsh-unread-badge) [![license](https://img.shields.io/npm/l/@fanfan4589/dsh-unread-badge)](./LICENSE)
 
+English · [中文](./README.zh.md)
 
-给 DeepSeek Harness 补上「未读」这件事：**Dock 图标上的数字角标** + **工作区标题行上的彩色点**。折叠起来的工作区也能一眼看出里面有没有跑完没看的结果。
+Adds the two things DeepSeek Harness does not answer on its own: **what is unread** and **where the work is**. A **Dock number badge**, a **task overview at the sidebar foot** (running / blocked / done, click through to the session), a **coloured dot on every Workspace row**, a **floating handle on the left edge while the sidebar is collapsed**, and **the last three sessions you visited**.
 
-> 纯渲染层方案：不需要 Host 路由、不落盘、不新增数据源，所有事实都来自宿主自己的 `sessionStatus` / `sessions.list` / `workspaces.list`。
+> Pure renderer-side patch: no Host route, no disk writes, no new data source. Every fact comes from the host's own `sessionStatus` / `sessions.list` / `workspaces.list`.
 
-> **定位｜克制的小功能补丁。** 只做这一件事，不改 DSH 主体：不替换内置槽位与布局、不改内核行为、不碰其他插件的数据。升级 DSH 一般无需跟着改；关掉或卸载即回到官方状态。
+> **Scope — a restrained patch.** It does these few things and does not touch the DSH core: it only takes official extension seats (`sidebar.footer.action`, `settings.general.item`, `shell.overlay`) and never replaces layout, changes kernel behaviour or touches another plugin's data. Upgrading DSH normally needs no change here; disable or remove the plugin and the official UI is back.
 
-## 它做什么
+## What it does
 
-| 需求 | 实现 |
+| Need | Implementation |
 | --- | --- |
-| 图标上的红色数字 = 未读任务数 | `navigator.setAppBadge(n)`：完成的回复没打开过、或这一轮出错，各算一个未读；全部打开后清空 |
-| 折叠工作区上的提醒点 | 每个 `data-row-key="workspace:<id>"` 标题行右侧插一个 7px 圆点，按组内状态取色 |
-| 声音提醒 | 不重复造：与 `dsh-notify-me` / `dsh-plugin-notify-sounds` 共存，本插件**不出声**，避免双响 |
+| The red number on the app icon = unread tasks | `navigator.setAppBadge(n)`: a finished reply you have not opened, or a run that errored, counts as one unread; all cleared once opened |
+| A task overview at the sidebar foot | A persistent row in the `sidebar.footer.action` seat: `2 running · 1 blocked · 3 done`; open it for groups (blocked / failed / running / done) and click any row to jump to that session |
+| A floating handle while the sidebar is collapsed | A small edge handle in the `shell.overlay` seat (only while the sidebar is collapsed): click for the same task panel, drag it up or down, position remembered locally |
+| The last three sessions you visited | Automatically remembers the three sessions you actually opened (from the sidebar, from history, or from anywhere else) in `localStorage`; survives reloads; hide one or clear all |
+| A dot on collapsed workspaces | A 7 px dot inserted at the right edge of every `data-row-key="workspace:<id>"` row, coloured by the group's status |
+| Sound | Not reimplemented: it coexists with `dsh-notify-me` / `dsh-plugin-notify-sounds` and stays **silent**, so you never get a double chime |
 
-颜色优先级（同一行只显示优先级最高的一个点）：
+Colour priority (one row shows only the highest-priority dot):
 
-| 颜色 | 含义 |
+| Colour | Meaning |
 | --- | --- |
-| 🔴 红 | 组内有会话**出错**（`api-session/error`） |
-| 🟢 绿 | 组内有**完成但没打开**的回复 |
-| 🔵 蓝（呼吸） | 组内有会话**正在运行**（可在设置里关掉） |
+| 🔴 Red | A session in the group **failed** (`api-session/error`) |
+| 🟢 Green | The group has a **finished but unopened** reply |
+| 🔵 Blue (breathing) | A session in the group is **running** (can be turned off in Settings) |
 
-「已经看过」沿用宿主的判定：会话在主页显示（`retainedBy.mainView > 0`）或宿主清掉 `completionUnread`。失败没有原生未读位，插件自己记，打开该会话即清；同一会话开始新一轮运行也会清掉上一次的失败标记。
+"Already seen" reuses the host's own verdict: the session is showing in the main view (`retainedBy.mainView > 0`) or the host cleared `completionUnread`. Failures have no native unread slot, so the plugin tracks them itself and clears on open; starting a new run in the same session also clears the previous failure mark.
 
-子代理（subagent）会话默认不计入——它们是主对话那一轮的步骤，不是你要做的事。
+Subagent sessions are ignored by default — they are steps of the turn you started, not tasks of yours. Archived sessions are ignored too.
 
-## 数据从哪来
+## Task overview in the sidebar
+
+A persistent row at the very bottom of the sidebar (above Settings), sharing the seat with DSH's own "Automated tasks":
+
+```
+● Tasks                            2 running · 1 blocked · 3 done
+```
+
+Clicking it opens a 320 px popover upwards with four priority-ordered groups:
+
+```
+Tasks
+  Blocked 1
+    ◐ Fix expired login       waiting for approval · dsh-unread-badge   3 min
+  Running 2
+    ● Refactor plugin panel   dsh-unread-badge                        12 min
+    ● Proofread transcript    copy project                            4 min
+  Done 3
+    ✓ Generate weekly report  daily                                    8 min
+  Recent                                        Clear
+    ○ Weekly report read      daily                                   just now
+```
+
+| Group | Rule | Colour |
+| --- | --- | --- |
+| **Blocked** | `pendingInteraction`: approval / plan review / question all count | Amber |
+| **Failed** | The run errored (`api-session/error`); cleared when opened | Red |
+| **Running** | Running and not waiting for you | Blue (breathing) |
+| **Done** | Finished but **never opened** (`completionUnread`); disappears on open | Green |
+| **Recent** | The last three sessions you actually visited; only those not already in the four groups above | Neutral hollow ring |
+
+- Click any row → `uiWorkspace.openSession(id)` opens that session and the popover closes; click outside or press `Esc` to close.
+- Each row shows: status dot, session title (ellipsised), blocked reason and workspace name, relative time (how long it has run / waited).
+- **Recent**: hovering a row reveals `×` to hide just that entry; "Clear" in the group header empties all of them. Clearing does not immediately write the current session back — recording resumes once you switch to another session.
+- When the sidebar is a 56 px icon rail, only the icon and the "needs you" count remain (blocked + failed + done).
+- Each group lists at most 30 rows; the rest show "N more".
+
+## Floating handle while the sidebar is collapsed
+
+Collapse the sidebar and the task row disappears with it — you had to expand the sidebar just to click a task. The floating handle covers that gap:
+
+- Registered in `shell.overlay` (the frame-wide layer above every column), so it is **not affected by the sidebar width or `overflow`** and stays when the sidebar is fully hidden;
+- Only appears while the sidebar is collapsed, and steps aside for the footer row once the sidebar is expanded — no duplication;
+- Sits on the left edge, vertically centred, and **drags up and down**; the position is remembered (`dsh-unread-badge:float-top`);
+- The button shows the "needs you" count (blocked + failed + done); the left edge uses the highest-priority colour;
+- Clicking it opens the same task panel (history included); click any row to jump to that session;
+- When the sidebar is a Windows-style 56 px icon rail, it moves to the right of the rail.
+
+## History: the last three sessions
+
+"Open a finished session → glance at it → get pulled away → come back and forget where I was" is what history catches:
+
+- The trigger is not "which row you clicked" but the host's `retainedBy.mainView > 0` (the session the main view is showing). So every route counts: opened from the sidebar, reopened from history, or newly created;
+- **Only three entries**, ordered by the last time you were there; deleted or archived sessions drop out automatically;
+- Sessions already listed under blocked / failed / running / done are not repeated in history;
+- Stored in `localStorage` (`dsh-unread-badge:history`), so reloads and restarts keep it;
+- Each entry can be hidden on its own (`×` on hover) or cleared; the whole group can be switched off in Settings.
+
+## Where the data comes from
 
 ```
 uiSession.sessionStatus      Map<sessionId, {running, pendingInteraction, completionUnread}>
 sessions.list                { ids, byId }  → retainedBy.mainView / origin / running
-uiWorkspace.workspaces.list  { items: [{ workspaceId, sessionIds }] }  → 会话挂在哪个工作区
-remote.$on('api-session/error')  (sessionId, message)                  → 失败
+uiWorkspace.workspaces.list  { items: [{ workspaceId, sessionIds }] }  → which workspace a session belongs to
+remote.$on('api-session/error')  (sessionId, message)                  → failure
+retainedBy.mainView > 0      → the session the main view shows; history keys off it
+data-sidebar-scrollport / data-sidebar-toggle  → sidebar expanded or collapsed (used by the floating handle)
 ```
 
-侧栏没有「工作区标题行」的插槽（`sidebar.*` 里只有会话行那一组），所以圆点是 **DOM 补丁**：靠 `data-row-key` 和 `row.lastElementChild` 定位，插在 hover 动作按钮之前。DSH 改这两个结构时点会消失，但不会报错、不影响任何原生功能。
+The sidebar has no "workspace header row" slot (`sidebar.*` only has the session-row group), so the dot is a **DOM patch**: it locates the row through `data-row-key` and inserts before `row.lastElementChild`. If DSH changes either structure the dot disappears, but nothing throws and no native feature is affected.
 
-## 安装
+## Install
 
-DSH 桌面版 → 左侧栏 **插件** → 添加插件 → 填目录绝对路径：
+From npm:
 
+```bash
+dsh plugin --profile <profile> add @fanfan4589/dsh-unread-badge
 ```
-/Users/feifan/FEIFAN/08-系统/08DSH插件/dsh-unread-badge
-```
 
-装完 **⌘R** 刷新窗口。
+Or in the DSH desktop app: **Plugins** → add a plugin → point it at the checkout directory (for example `/absolute/path/to/dsh-unread-badge`), then refresh the window once.
 
-## 设置
+Uninstall through Plugin Manager; preferences and history stay in `localStorage`.
 
-**设置 → 通用 → 未读提醒**：
+## Settings
 
-- **Dock 数字角标**：总开关；
-- **工作区提醒点**：总开关；
-- **也在运行的会话上显示蓝点**：关掉后只提示未读与出错。
+**Settings → General → Unread badge**:
 
-偏好存在 `localStorage` 的 `dsh-unread-badge:prefs`。
+- **Task overview in the sidebar**: master switch for the footer row;
+- **Floating handle while the sidebar is collapsed**: master switch for the left-edge handle;
+- **Dock number badge**: master switch;
+- **Workspace dots**: master switch;
+- **History (last 3 sessions)**: switches the history group; turning it off stops recording but keeps existing entries;
+- **Show a blue dot for running sessions**: turn off to only surface unread and failed work.
 
-## 自检
+Preferences live in `localStorage` under `dsh-unread-badge:prefs`.
 
-DevTools（⌘⌥I）控制台：
+## Self-check
+
+In the DevTools console (⌘⌥I):
 
 ```js
 __dshUnreadBadge.state()
-// { badgeCount, badgeSupported, dock, dots, running, errors, workspaces }
-__dshUnreadBadge.refresh()   // 立刻重算一次
+// { badgeCount, badgeSupported, dock, dots, running, panel, float, history, recent, current, errors, workspaces }
+__dshUnreadBadge.tasks()     // the snapshot the panel uses: { counts, groups, total }
+__dshUnreadBadge.refresh()   // recompute immediately
+__dshUnreadBadge.state().recent   // history entries [{ id, at }], newest first
+__dshUnreadBadge.forget('id')     // hide one history entry
+__dshUnreadBadge.clearHistory()   // clear history
 ```
 
-- `badgeSupported: false` 表示当前渲染层没有 `navigator.setAppBadge`（例如网页版没安装成 PWA）——角标不可用，圆点照常。
-- `workspaces` 里能看到每个工作区当前的 `{unread, error, running}` 计数。
+- `badgeSupported: false` means the renderer has no `navigator.setAppBadge` (e.g. the web build is not installed as a PWA) — the badge is unavailable, the dots still work.
+- `workspaces` exposes each workspace's current `{unread, error, running}` counts.
 
-## 已知边界
+## Known limits
 
-- **Dock 角标只在桌面版可用**：Web 版要走 Chrome 把 DSH 安装成 PWA 才有归属，浏览器标签页不显示。
-- **不处理系统通知权限**：角标不走通知通道，不需要授权。
-- **圆点是 DOM 补丁**：DSH 大版本改侧栏结构时可能需要跟着改选择器（`data-row-key` 前缀 / 行尾动作按钮）。
-- 侧栏收成 56px 图标条时工作区标题行本身不渲染，圆点也自然跟着隐藏。
+- **The Dock badge only works in the desktop app**: the web build must be installed as a Chrome PWA to have a Dock icon at all; a browser tab shows no badge.
+- **No system notification permission is handled**: the badge does not go through the notification channel and needs no authorisation.
+- **The dots are a DOM patch**: a major DSH sidebar restructure may need the selectors updated (`data-row-key` prefix / row-end action button).
+- The workspace header row itself is not rendered in the 56 px rail, so its dots hide with it.
+- **The task popover uses hand-computed anchors**: the sidebar clips `overflow`, so the popover is `position: fixed` above the trigger row and re-measures on resize/scroll. On very narrow windows it sticks to the edge and narrows to 240 px.
+- **The floating handle infers the sidebar shape from DOM markers**: `[data-sidebar-scrollport]` (expanded) and the rail width measured from `[data-sidebar-toggle]`. A DSH sidebar restructure means updating those selectors; when detection fails it falls back to "expanded", so the handle stays hidden and nothing else breaks.
+- **History is local**: it lives in `localStorage`, so another browser or a cache wipe loses it; only the session id and "last visited" time are stored, and titles always come from the live host.
+- **Relative times refresh once a minute**; session titles resolve `title` → `displayTitle` → directory name → session id.
 
-## 来源与致谢
+## Credits
 
-本插件是独立实现：`client.js` 里没有从其它插件复制来的代码。设计上参考了生态里两件同方向的作品，都读过它们的源码来确认宿主 API 的用法：
+This plugin is an independent implementation: no code was copied from other plugins. Two works in the same direction were read to confirm how the host APIs behave, and are credited here:
 
-- **dsh-plugin-desktop-notify**（MIT，© chendaleiQ）：Dock 角标走渲染层 `navigator.setAppBadge()` 这条路、以及「未读 = 完成未读 + 失败」的事实模型，是从它这里学到并验证的。
-- **dsh-notify-me**（MIT，© chromoany）：如何安全地从 `uiSession.sessionStatus` / `sessions.list` 读宿主状态、`inject` 的写法，参考了它的实现。
+- **dsh-plugin-desktop-notify** (MIT, © chendaleiQ): the route of writing the Dock badge from the renderer through `navigator.setAppBadge()`, and the "unread = finished-unread + failed" fact model, were learned and verified from it.
+- **dsh-notify-me** (MIT, © chromoany): reading host state safely from `uiSession.sessionStatus` / `sessions.list`, and the `inject` idiom, were informed by its implementation.
 
-两者都是 MIT，即便有片段级借鉴也允许使用与再分发；这里按开源习惯在致谢里点名。本插件本身以 **MIT** 发布，见 [`LICENSE`](./LICENSE)。
+Both are MIT, so even snippet-level borrowing is permitted with attribution; this plugin is released under **MIT** itself, see [`LICENSE`](./LICENSE).
 
-## 开发
+## Development
 
 ```sh
 node --check client.js
-node test/smoke.mjs      # 离线冒烟：宿主桩 + 聚合 + 插点 + 角标 + 出错回落
+node test/smoke.mjs      # offline smoke: host stubs + aggregation + dots + badge + error fallback + task snapshot (blocked/running/done/history + hiding history)
 ```
 
-`client.js` 是浏览器可直接加载的模块（`window.__ModuleLoader__.load`），改完刷新页面即生效，没有构建步骤。`index.js` 只是让 bundle 行可解析的空 Host 半边。
+`client.js` is a module the browser can load directly (`window.__ModuleLoader__.load`); reload the page after edits, there is no build step. `index.js` is an empty Host half so the bundle row resolves.
+
+## License
+
+MIT © 2026 feifandiv

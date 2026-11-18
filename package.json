@@ -1,7 +1,7 @@
 {
   "name": "@fanfan4589/dsh-unread-badge",
-  "version": "0.1.1",
-  "description": "Unread badge for DeepSeek Harness: a Dock number badge for replies you have not opened yet, plus a coloured dot on Workspace rows so a collapsed group still tells you something finished there. · 未读角标：Dock 数字角标 + 工作区折叠时的彩色提醒点。",
+  "version": "0.3.0",
+  "description": "Unread badge and task radar for DeepSeek Harness: a Dock number badge, a persistent sidebar task row (running / blocked / done with a click-through list), a floating handle while the sidebar is collapsed, and the last three sessions you visited. · 未读角标 + 侧栏任务总览 + 悬浮球 + 历史。",
   "type": "module",
   "license": "MIT",
   "author": "feifandiv",
@@ -12,7 +12,9 @@
     "unread",
     "badge",
     "dock",
-    "workspace"
+    "workspace",
+    "history",
+    "floating"
   ],
   "engines": {
     "dsh": ">=0.2.1-rc.1"
@@ -27,7 +29,9 @@
     "cordis.patch.yml",
     "icon.svg",
     "README.md",
-    "LICENSE"
+    "LICENSE",
+    "README.zh.md",
+    "CHANGELOG.md"
   ],
   "dsh": {
     "bundle": {
@@ -37,6 +41,7 @@
       "platform": "web",
       "immediately": true,
       "inject": [
+        "@deepseek-ai/dsh-client-ui-layout",
         "@deepseek-ai/dsh-client-ui-session",
         "@deepseek-ai/dsh-client-ui-workspace",
         "@deepseek-ai/dsh-api-session-controller"

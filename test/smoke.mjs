@@ -61,6 +61,7 @@ const navigator = {
 };
 
 const storage = new Map();
+const registrations = [];
 const rafQueue = [];
 /** 浏览器里 rAF 是下一帧才跑；测试里手动把队列放掉，行为才和真实一致。 */
 function flushRaf() {
@@ -150,7 +151,10 @@ const ctx = {
   uiSession: { sessionStatus: status },
   uiWorkspace: { workspaces: { list: workspaces } },
   locale: { register: () => () => {}, bind: () => (key) => key },
-  slots: { inject: (name, fn) => fn(), register: () => () => {} },
+  slots: {
+    inject: (name, fn) => fn(),
+    register: (spec) => { registrations.push(spec.name + ':' + spec.id); return () => {}; },
+  },
   get: (name) => (name === 'remote' ? { $on: (event, handler) => { if (event === 'api-session/error') errorHandler = handler; return () => {}; } } : undefined),
   effect(fn) { const dispose = fn(); return dispose; },
 };
@@ -167,6 +171,9 @@ const dotA = rows[0].children.find((c) => c.hasAttribute('data-dsh-unread-dot'))
 const dotB = rows[1].children.find((c) => c.hasAttribute('data-dsh-unread-dot'));
 
 assert(mod.inject.join(',') === 'sessions,uiSession,uiWorkspace,locale,slots', 'inject 列表');
+assert(registrations.includes('sidebar.footer.action:unreadBadge'), '注册进侧栏底部 footer.action');
+assert(registrations.includes('shell.overlay:unreadBadge.float'), '注册进 shell.overlay 悬浮层');
+assert(registrations.includes('settings.general.item:unreadBadge'), '注册设置项');
 assert(dotA !== undefined, 'ws-a 行插入了点');
 assert(dotA.getAttribute('data-tone') === 'unread', 'ws-a 是绿色未读点');
 assert(dotB !== undefined && dotB.getAttribute('data-tone') === 'running', 'ws-b 是没有未读时的蓝色运行点');
@@ -196,6 +203,31 @@ status.update(new Map([
 ]));
 flushRaf();
 assert(badges.at(-1)[0] === 'clear', '全部读掉后角标清空');
+
+const tasks = window.__dshUnreadBadge.tasks();
+assert(tasks.counts.done === 0 && tasks.counts.running === 1, '任务快照：读掉后只剩运行中');
+
+// 历史：s1 是最近看过、又不在任何活动分组里的会话 → 只它一条进历史
+const historyGroup = tasks.groups.find((group) => group.key === 'history');
+assert(historyGroup !== undefined && historyGroup.count === 1, '出现历史分组');
+assert(historyGroup.items[0].id === 's1' && historyGroup.items[0].state === 'recent', '历史里是刚看过的 s1');
+assert(window.__dshUnreadBadge.state().recent.length === 2, '历史最多留 2 条（s1 + 正在跑的 s3）');
+window.__dshUnreadBadge.forget('s1');
+const afterForget = window.__dshUnreadBadge.tasks();
+assert(afterForget.groups.every((group) => group.key !== 'history'), '手动隐藏后历史分组消失');
+assert(window.__dshUnreadBadge.state().recent.length === 1, '隐藏会写回本地历史');
+
+// 卡住（提问也算）→ 归到 blocked，并且不再算进 running
+status.update(new Map([
+  ['s1', { running: true, completionUnread: false }],
+  ['s2', { running: true, completionUnread: false, pendingInteraction: { kind: 'question' } }],
+  ['s3', { running: true, completionUnread: false }],
+]));
+flushRaf();
+const blocked = window.__dshUnreadBadge.tasks();
+assert(blocked.counts.blocked === 1, '提问计入卡住');
+assert(blocked.groups[0].key === 'blocked', '卡住排在分组第一位');
+assert(blocked.groups[0].items[0].title === '出错', '卡住项标题正确');
 
 const state = window.__dshUnreadBadge.state();
 assert(state.badgeCount === 0 && state.errors.length === 0, '调试口状态同步');
